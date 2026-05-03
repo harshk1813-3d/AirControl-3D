@@ -229,22 +229,28 @@
                 targetPhi: 78,
                 targetRadius: 4,
                 currentX: 0,
-                currentY: 0
+                currentY: 0,
+                currentZ: 0,
+                targetZ: 0
             };
 
             const gestureState = {
                 lastPointer: null,
                 lastPinchPoint: null,
                 lastTwoHandDistance: null,
-                lastTwoHandMidpoint: null,
                 smoothedTwoHandDistance: null
             };
 
             const zoomSettings = {
-                smoothing: 0.35,
-                deadZone: 0.003,
-                maxDelta: 0.035,
-                sensitivity: 5.2
+                smoothing: 0.55,
+                deadZone: 0.001,
+                maxDelta: 0.08,
+                sensitivity: 18
+            };
+
+            const panSettings = {
+                sensitivity: 4.8,
+                limit: 3
             };
 
             function updateCanvasSize() {
@@ -302,7 +308,7 @@
                 );
                 modelViewer.setAttribute(
                     'camera-target',
-                    `${viewState.currentX.toFixed(2)}m ${viewState.currentY.toFixed(2)}m 0m`
+                    `${viewState.currentX.toFixed(2)}m ${viewState.currentY.toFixed(2)}m ${viewState.currentZ.toFixed(2)}m`
                 );
             }
 
@@ -314,6 +320,7 @@
                 viewState.radius += (viewState.targetRadius - viewState.radius) * 0.16;
                 viewState.currentX += (viewState.targetX - viewState.currentX) * 0.16;
                 viewState.currentY += (viewState.targetY - viewState.currentY) * 0.16;
+                viewState.currentZ += (viewState.targetZ - viewState.currentZ) * 0.16;
 
                 updateModelViewer();
             }
@@ -346,6 +353,41 @@
 
             function applyDeadZone(value, threshold) {
                 return Math.abs(value) < threshold ? 0 : value;
+            }
+
+            function getScreenPanAxes() {
+                const theta = viewState.targetTheta * Math.PI / 180;
+                const phi = viewState.targetPhi * Math.PI / 180;
+                const cameraDirection = {
+                    x: Math.sin(phi) * Math.sin(theta),
+                    y: Math.cos(phi),
+                    z: Math.sin(phi) * Math.cos(theta)
+                };
+                const right = normalizeVector({
+                    x: cameraDirection.z,
+                    y: 0,
+                    z: -cameraDirection.x
+                });
+                const up = normalizeVector(crossVectors(right, cameraDirection));
+
+                return { right, up };
+            }
+
+            function normalizeVector(vector) {
+                const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
+                return {
+                    x: vector.x / length,
+                    y: vector.y / length,
+                    z: vector.z / length
+                };
+            }
+
+            function crossVectors(a, b) {
+                return {
+                    x: a.y * b.z - a.z * b.y,
+                    y: a.z * b.x - a.x * b.z,
+                    z: a.x * b.y - a.y * b.x
+                };
             }
 
             function isPinching(landmarks) {
@@ -400,7 +442,6 @@
                 gestureState.lastPointer = null;
                 gestureState.lastPinchPoint = null;
                 gestureState.lastTwoHandDistance = null;
-                gestureState.lastTwoHandMidpoint = null;
                 gestureState.smoothedTwoHandDistance = null;
             }
 
@@ -408,7 +449,6 @@
                 const indexTip = landmarks[8];
 
                 gestureState.lastTwoHandDistance = null;
-                gestureState.lastTwoHandMidpoint = null;
                 gestureState.smoothedTwoHandDistance = null;
                 gestureState.lastPinchPoint = null;
 
@@ -427,7 +467,6 @@
                 const pinchPoint = midpoint(landmarks[4], landmarks[8]);
 
                 gestureState.lastTwoHandDistance = null;
-                gestureState.lastTwoHandMidpoint = null;
                 gestureState.smoothedTwoHandDistance = null;
                 gestureState.lastPointer = null;
 
@@ -440,8 +479,25 @@
                 if (gestureState.lastPinchPoint) {
                     const dx = pinchPoint.x - gestureState.lastPinchPoint.x;
                     const dy = pinchPoint.y - gestureState.lastPinchPoint.y;
-                    viewState.targetX = clamp(viewState.targetX - dx * 4.2, -2.2, 2.2);
-                    viewState.targetY = clamp(viewState.targetY + dy * 3.2, -1.6, 1.6);
+                    const { right, up } = getScreenPanAxes();
+                    const panX = -dx * panSettings.sensitivity;
+                    const panY = -dy * panSettings.sensitivity;
+
+                    viewState.targetX = clamp(
+                        viewState.targetX + right.x * panX + up.x * panY,
+                        -panSettings.limit,
+                        panSettings.limit
+                    );
+                    viewState.targetY = clamp(
+                        viewState.targetY + right.y * panX + up.y * panY,
+                        -panSettings.limit,
+                        panSettings.limit
+                    );
+                    viewState.targetZ = clamp(
+                        viewState.targetZ + right.z * panX + up.z * panY,
+                        -panSettings.limit,
+                        panSettings.limit
+                    );
                 }
 
                 gestureState.lastPinchPoint = pinchPoint;
@@ -449,16 +505,14 @@
             }
 
             function handleTwoHands(firstHand, secondHand) {
-                const firstIndex = firstHand[8];
-                const secondIndex = secondHand[8];
-                const rawHandDistance = calculateDistance(firstIndex, secondIndex);
+                const firstWrist = firstHand[0];
+                const secondWrist = secondHand[0];
+                const rawHandDistance = calculateDistance(firstWrist, secondWrist);
                 const handDistance = smoothValue(
                     gestureState.smoothedTwoHandDistance,
                     rawHandDistance,
                     zoomSettings.smoothing
                 );
-                const handMidpoint = midpoint(firstIndex, secondIndex);
-
                 gestureState.smoothedTwoHandDistance = handDistance;
 
                 if (gestureState.lastTwoHandDistance !== null) {
@@ -475,7 +529,6 @@
                 }
 
                 gestureState.lastTwoHandDistance = handDistance;
-                gestureState.lastTwoHandMidpoint = handMidpoint;
                 gestureState.lastPointer = null;
                 gestureState.lastPinchPoint = null;
                 statusElement.textContent = 'Zooming model with both hands';
