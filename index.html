@@ -55,6 +55,7 @@
             pointer-events: none;
             z-index: 3;
             background: transparent;
+            will-change: transform;
         }
 
         #status,
@@ -142,6 +143,25 @@
             color: rgba(0, 0, 0, 0.68);
         }
 
+        #reset-button {
+            position: absolute;
+            right: 18px;
+            top: 104px;
+            z-index: 13;
+            border: 1px solid rgba(0, 0, 0, 0.16);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.78);
+            color: #050505;
+            padding: 10px 14px;
+            font: 600 14px/1 Inter, "Segoe UI", Arial, Helvetica, sans-serif;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
+
+        #reset-button:hover {
+            background: rgba(255, 255, 255, 0.95);
+        }
+
         @media (max-width: 640px) {
             #top-bar {
                 height: 78px;
@@ -173,6 +193,11 @@
                 left: 10px;
                 width: auto;
             }
+
+            #reset-button {
+                top: 138px;
+                right: 10px;
+            }
         }
     </style>
 </head>
@@ -197,6 +222,7 @@
             <p id="tagline">Where Motion<br>Becomes Control.</p>
         </header>
         <div id="status">Loading hand tracking...</div>
+        <button id="reset-button" type="button">Reset Position</button>
         <div id="gesture-panel">
             <strong>Hand Controls</strong>
             <span>Right hand: move your index finger to rotate.</span>
@@ -218,20 +244,21 @@
             const canvasCtx = canvasElement.getContext('2d');
             const statusElement = document.getElementById('status');
             const modelViewer = document.getElementById('model-viewer');
+            const resetButton = document.getElementById('reset-button');
 
             const viewState = {
                 theta: -20,
                 phi: 78,
                 radius: 4,
-                targetX: 0,
-                targetY: 0,
+                fov: 35,
+                panX: 0,
+                panY: 0,
                 targetTheta: -20,
                 targetPhi: 78,
                 targetRadius: 4,
-                currentX: 0,
-                currentY: 0,
-                currentZ: 0,
-                targetZ: 0
+                targetFov: 35,
+                targetPanX: 0,
+                targetPanY: 0
             };
 
             const gestureState = {
@@ -242,15 +269,15 @@
             };
 
             const zoomSettings = {
-                smoothing: 0.55,
+                smoothing: 0.6,
                 deadZone: 0.001,
                 maxDelta: 0.08,
-                sensitivity: 18
+                sensitivity: 95
             };
 
             const panSettings = {
-                sensitivity: 4.8,
-                limit: 3
+                sensitivity: 900,
+                limit: 360
             };
 
             function updateCanvasSize() {
@@ -306,10 +333,9 @@
                     'camera-orbit',
                     `${viewState.theta.toFixed(2)}deg ${viewState.phi.toFixed(2)}deg ${viewState.radius.toFixed(2)}m`
                 );
-                modelViewer.setAttribute(
-                    'camera-target',
-                    `${viewState.currentX.toFixed(2)}m ${viewState.currentY.toFixed(2)}m ${viewState.currentZ.toFixed(2)}m`
-                );
+                modelViewer.setAttribute('camera-target', '0m 0m 0m');
+                modelViewer.setAttribute('field-of-view', `${viewState.fov.toFixed(2)}deg`);
+                modelViewer.style.transform = `translate3d(${viewState.panX.toFixed(1)}px, ${viewState.panY.toFixed(1)}px, 0)`;
             }
 
             function animateViewer() {
@@ -318,9 +344,9 @@
                 viewState.theta += (viewState.targetTheta - viewState.theta) * 0.18;
                 viewState.phi += (viewState.targetPhi - viewState.phi) * 0.18;
                 viewState.radius += (viewState.targetRadius - viewState.radius) * 0.16;
-                viewState.currentX += (viewState.targetX - viewState.currentX) * 0.16;
-                viewState.currentY += (viewState.targetY - viewState.currentY) * 0.16;
-                viewState.currentZ += (viewState.targetZ - viewState.currentZ) * 0.16;
+                viewState.fov += (viewState.targetFov - viewState.fov) * 0.2;
+                viewState.panX += (viewState.targetPanX - viewState.panX) * 0.18;
+                viewState.panY += (viewState.targetPanY - viewState.panY) * 0.18;
 
                 updateModelViewer();
             }
@@ -355,44 +381,22 @@
                 return Math.abs(value) < threshold ? 0 : value;
             }
 
-            function getScreenPanAxes() {
-                const theta = viewState.targetTheta * Math.PI / 180;
-                const phi = viewState.targetPhi * Math.PI / 180;
-                const cameraDirection = {
-                    x: Math.sin(phi) * Math.sin(theta),
-                    y: Math.cos(phi),
-                    z: Math.sin(phi) * Math.cos(theta)
-                };
-                const right = normalizeVector({
-                    x: cameraDirection.z,
-                    y: 0,
-                    z: -cameraDirection.x
-                });
-                const up = normalizeVector(crossVectors(right, cameraDirection));
-
-                return { right, up };
-            }
-
-            function normalizeVector(vector) {
-                const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
-                return {
-                    x: vector.x / length,
-                    y: vector.y / length,
-                    z: vector.z / length
-                };
-            }
-
-            function crossVectors(a, b) {
-                return {
-                    x: a.y * b.z - a.z * b.y,
-                    y: a.z * b.x - a.x * b.z,
-                    z: a.x * b.y - a.y * b.x
-                };
-            }
-
             function isPinching(landmarks) {
                 return calculateDistance(landmarks[4], landmarks[8]) < 0.075;
             }
+
+            function resetModelPosition() {
+                viewState.targetTheta = -20;
+                viewState.targetPhi = 78;
+                viewState.targetRadius = 4;
+                viewState.targetFov = 35;
+                viewState.targetPanX = 0;
+                viewState.targetPanY = 0;
+                resetGestureMemory();
+                statusElement.textContent = 'Model position reset';
+            }
+
+            resetButton.addEventListener('click', resetModelPosition);
 
             function getPhysicalHandLabel(mediaPipeLabel) {
                 // The preview is mirrored, so flip MediaPipe's label for controls.
@@ -479,22 +483,13 @@
                 if (gestureState.lastPinchPoint) {
                     const dx = pinchPoint.x - gestureState.lastPinchPoint.x;
                     const dy = pinchPoint.y - gestureState.lastPinchPoint.y;
-                    const { right, up } = getScreenPanAxes();
-                    const panX = -dx * panSettings.sensitivity;
-                    const panY = -dy * panSettings.sensitivity;
-
-                    viewState.targetX = clamp(
-                        viewState.targetX + right.x * panX + up.x * panY,
+                    viewState.targetPanX = clamp(
+                        viewState.targetPanX - dx * panSettings.sensitivity,
                         -panSettings.limit,
                         panSettings.limit
                     );
-                    viewState.targetY = clamp(
-                        viewState.targetY + right.y * panX + up.y * panY,
-                        -panSettings.limit,
-                        panSettings.limit
-                    );
-                    viewState.targetZ = clamp(
-                        viewState.targetZ + right.z * panX + up.z * panY,
+                    viewState.targetPanY = clamp(
+                        viewState.targetPanY + dy * panSettings.sensitivity,
                         -panSettings.limit,
                         panSettings.limit
                     );
@@ -521,10 +516,10 @@
                         -zoomSettings.maxDelta,
                         zoomSettings.maxDelta
                     );
-                    viewState.targetRadius = clamp(
-                        viewState.targetRadius - zoomDelta * zoomSettings.sensitivity,
-                        1.2,
-                        8
+                    viewState.targetFov = clamp(
+                        viewState.targetFov - zoomDelta * zoomSettings.sensitivity,
+                        12,
+                        70
                     );
                 }
 
