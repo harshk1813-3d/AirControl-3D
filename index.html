@@ -50,9 +50,9 @@
         #model-viewer {
             position: absolute;
             top: 86px;
-            right: -35%;
-            bottom: -35%;
-            left: -35%;
+            right: -70%;
+            bottom: -70%;
+            left: -70%;
             width: auto;
             height: auto;
             pointer-events: none;
@@ -219,7 +219,7 @@
             camera-orbit="-20deg 78deg 28m"
             camera-target="0m 0m 0m"
             field-of-view="60deg"
-            scale="0.45 0.45 0.45"
+            scale="0.16 0.16 0.16"
             exposure="1"
             shadow-intensity="0.45"
             interaction-prompt="none"
@@ -267,8 +267,7 @@
                 targetRadius: 28,
                 targetFov: 60,
                 targetPanX: 0,
-                targetPanY: 0,
-                viewerScale: 0.42
+                targetPanY: 0
             };
 
             const gestureState = {
@@ -287,7 +286,7 @@
 
             const panSettings = {
                 sensitivity: 520,
-                limit: 180
+                limit: 300
             };
 
             function updateCanvasSize() {
@@ -345,7 +344,7 @@
                 );
                 modelViewer.setAttribute('camera-target', '0m 0m 0m');
                 modelViewer.setAttribute('field-of-view', `${viewState.fov.toFixed(2)}deg`);
-                modelViewer.style.transform = `translate3d(${viewState.panX.toFixed(1)}px, ${viewState.panY.toFixed(1)}px, 0) scale(${viewState.viewerScale})`;
+                modelViewer.style.transform = `translate3d(${viewState.panX.toFixed(1)}px, ${viewState.panY.toFixed(1)}px, 0)`;
             }
 
             function animateViewer() {
