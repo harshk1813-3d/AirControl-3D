@@ -49,12 +49,9 @@
 
         #model-viewer {
             position: absolute;
-            top: 86px;
-            right: -70%;
-            bottom: -70%;
-            left: -70%;
-            width: auto;
-            height: auto;
+            inset: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
             z-index: 3;
             background: transparent;
@@ -167,10 +164,6 @@
         }
 
         @media (max-width: 640px) {
-            #model-viewer {
-                top: 78px;
-            }
-
             #top-bar {
                 height: 78px;
                 padding: 0 16px;
@@ -216,10 +209,9 @@
         <model-viewer
             id="model-viewer"
             src="duffel_bag.glb"
-            camera-orbit="-20deg 78deg 28m"
+            camera-orbit="-20deg 78deg 4m"
             camera-target="0m 0m 0m"
-            field-of-view="60deg"
-            scale="0.06 0.06 0.06"
+            field-of-view="35deg"
             exposure="1"
             shadow-intensity="0.45"
             interaction-prompt="none"
@@ -258,14 +250,14 @@
             const viewState = {
                 theta: -20,
                 phi: 78,
-                radius: 28,
-                fov: 60,
+                radius: 4,
+                fov: 35,
                 panX: 0,
                 panY: 0,
                 targetTheta: -20,
                 targetPhi: 78,
-                targetRadius: 28,
-                targetFov: 60,
+                targetRadius: 4,
+                targetFov: 35,
                 targetPanX: 0,
                 targetPanY: 0
             };
@@ -285,8 +277,8 @@
             };
 
             const panSettings = {
-                sensitivity: 520,
-                limit: 300
+                sensitivity: 900,
+                limit: 360
             };
 
             function updateCanvasSize() {
@@ -397,8 +389,8 @@
             function resetModelPosition() {
                 viewState.targetTheta = -20;
                 viewState.targetPhi = 78;
-                viewState.targetRadius = 28;
-                viewState.targetFov = 60;
+                viewState.targetRadius = 4;
+                viewState.targetFov = 35;
                 viewState.targetPanX = 0;
                 viewState.targetPanY = 0;
                 resetGestureMemory();
@@ -528,7 +520,7 @@
                     viewState.targetFov = clamp(
                         viewState.targetFov - zoomDelta * zoomSettings.sensitivity,
                         12,
-                        90
+                        70
                     );
                 }
 
