@@ -47,13 +47,14 @@
             z-index: 4;
         }
 
-        #three-canvas {
+        #model-viewer {
             position: absolute;
             inset: 0;
             width: 100%;
             height: 100%;
             pointer-events: none;
             z-index: 3;
+            background: transparent;
         }
 
         #status,
@@ -179,7 +180,17 @@
     <div class="container">
         <video id="webcam" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
-        <div id="three-canvas"></div>
+        <model-viewer
+            id="model-viewer"
+            src="duffel_bag.glb"
+            camera-orbit="-20deg 78deg 4m"
+            camera-target="0m 0m 0m"
+            field-of-view="35deg"
+            exposure="1"
+            shadow-intensity="0.45"
+            interaction-prompt="none"
+            autoplay>
+        </model-viewer>
         <header id="top-bar">
             <h1 id="brand">AirControl 3D</h1>
             <div id="divider"></div>
@@ -197,8 +208,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const MODEL_URL = 'duffel_bag.glb';
@@ -207,24 +217,19 @@
             const canvasElement = document.getElementById('canvas');
             const canvasCtx = canvasElement.getContext('2d');
             const statusElement = document.getElementById('status');
-            const threeContainer = document.getElementById('three-canvas');
-
-            let scene;
-            let camera;
-            let renderer;
-            let modelRoot;
+            const modelViewer = document.getElementById('model-viewer');
 
             const viewState = {
-                rotationX: 0.1,
-                rotationY: -0.35,
-                panX: 0,
-                panY: 0,
-                zoom: 1,
-                targetRotationX: 0.1,
-                targetRotationY: -0.35,
-                targetPanX: 0,
-                targetPanY: 0,
-                targetZoom: 1
+                theta: -20,
+                phi: 78,
+                radius: 4,
+                targetX: 0,
+                targetY: 0,
+                targetTheta: -20,
+                targetPhi: 78,
+                targetRadius: 4,
+                currentX: 0,
+                currentY: 0
             };
 
             const gestureState = {
@@ -249,15 +254,6 @@
 
             function resizeRenderer() {
                 updateCanvasSize();
-
-                if (renderer) {
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                }
-
-                if (camera) {
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                }
             }
 
             window.addEventListener('resize', resizeRenderer);
@@ -287,133 +283,39 @@
                 }
             }
 
-            function initThreeJS() {
-                scene = new THREE.Scene();
-
-                camera = new THREE.PerspectiveCamera(
-                    55,
-                    window.innerWidth / window.innerHeight,
-                    0.1,
-                    1000
-                );
-                camera.position.set(0, 0.25, 6);
-
-                renderer = new THREE.WebGLRenderer({
-                    antialias: true,
-                    alpha: true
+            function initModelViewer() {
+                modelViewer.src = MODEL_URL;
+                modelViewer.addEventListener('load', () => {
+                    statusElement.textContent = 'Model loaded. Show one or two hands.';
                 });
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setClearColor(0x000000, 0);
-                threeContainer.appendChild(renderer.domElement);
-
-                modelRoot = new THREE.Group();
-                scene.add(modelRoot);
-
-                const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
-                keyLight.position.set(4, 5, 6);
-                scene.add(keyLight);
-
-                const fillLight = new THREE.DirectionalLight(0x8fd3ff, 0.9);
-                fillLight.position.set(-4, 2, 3);
-                scene.add(fillLight);
-
-                const rimLight = new THREE.DirectionalLight(0xff7ad9, 0.75);
-                rimLight.position.set(0, 4, -5);
-                scene.add(rimLight);
-
-                scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-
-                loadModel();
-                animate();
+                modelViewer.addEventListener('error', () => {
+                    statusElement.textContent = `Could not load ${MODEL_URL}.`;
+                });
+                updateModelViewer();
+                animateViewer();
             }
 
-            function loadModel() {
-                if (!MODEL_URL) {
-                    addPlaceholderModel();
-                    statusElement.textContent = 'No model selected. Using placeholder.';
-                    return;
-                }
-
-                statusElement.textContent = `Loading ${MODEL_URL}...`;
-                const loader = new THREE.GLTFLoader();
-                loader.load(
-                    MODEL_URL,
-                    (gltf) => {
-                        modelRoot.clear();
-                        modelRoot.add(gltf.scene);
-                        fitModelToView(gltf.scene);
-                        statusElement.textContent = 'Model loaded. Show one or two hands.';
-                    },
-                    undefined,
-                    (error) => {
-                        console.error('Model load error:', error);
-                        addPlaceholderModel();
-                        statusElement.textContent = `Could not load ${MODEL_URL}. Using placeholder.`;
-                    }
+            function updateModelViewer() {
+                modelViewer.setAttribute(
+                    'camera-orbit',
+                    `${viewState.theta.toFixed(2)}deg ${viewState.phi.toFixed(2)}deg ${viewState.radius.toFixed(2)}m`
+                );
+                modelViewer.setAttribute(
+                    'camera-target',
+                    `${viewState.currentX.toFixed(2)}m ${viewState.currentY.toFixed(2)}m 0m`
                 );
             }
 
-            function addPlaceholderModel() {
-                modelRoot.clear();
+            function animateViewer() {
+                requestAnimationFrame(animateViewer);
 
-                const material = new THREE.MeshStandardMaterial({
-                    color: 0x42e8f4,
-                    metalness: 0.35,
-                    roughness: 0.28
-                });
-                const accentMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xff4fd8,
-                    metalness: 0.2,
-                    roughness: 0.35
-                });
+                viewState.theta += (viewState.targetTheta - viewState.theta) * 0.18;
+                viewState.phi += (viewState.targetPhi - viewState.phi) * 0.18;
+                viewState.radius += (viewState.targetRadius - viewState.radius) * 0.16;
+                viewState.currentX += (viewState.targetX - viewState.currentX) * 0.16;
+                viewState.currentY += (viewState.targetY - viewState.currentY) * 0.16;
 
-                const body = new THREE.Mesh(new THREE.TorusKnotGeometry(1.05, 0.32, 160, 24), material);
-                const ring = new THREE.Mesh(new THREE.TorusGeometry(1.65, 0.025, 16, 120), accentMaterial);
-                ring.rotation.x = Math.PI / 2;
-
-                const base = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.9, 1.15, 0.16, 64),
-                    new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
-                        metalness: 0.1,
-                        roughness: 0.55
-                    })
-                );
-                base.position.y = -1.45;
-
-                modelRoot.add(body, ring, base);
-            }
-
-            function fitModelToView(object) {
-                const box = new THREE.Box3().setFromObject(object);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                const maxDimension = Math.max(size.x, size.y, size.z) || 1;
-                const scale = 2.4 / maxDimension;
-
-                object.position.sub(center);
-                object.scale.setScalar(scale);
-            }
-
-            function animate() {
-                requestAnimationFrame(animate);
-
-                viewState.rotationX += (viewState.targetRotationX - viewState.rotationX) * 0.16;
-                viewState.rotationY += (viewState.targetRotationY - viewState.rotationY) * 0.16;
-                viewState.panX += (viewState.targetPanX - viewState.panX) * 0.16;
-                viewState.panY += (viewState.targetPanY - viewState.panY) * 0.16;
-                viewState.zoom += (viewState.targetZoom - viewState.zoom) * 0.14;
-
-                if (modelRoot) {
-                    modelRoot.rotation.x = viewState.rotationX;
-                    modelRoot.rotation.y = viewState.rotationY;
-                    modelRoot.position.x = viewState.panX;
-                    modelRoot.position.y = viewState.panY;
-                    modelRoot.scale.setScalar(viewState.zoom);
-                }
-
-                renderer.render(scene, camera);
+                updateModelViewer();
             }
 
             function calculateDistance(point1, point2) {
@@ -508,9 +410,8 @@
                 if (gestureState.lastPointer) {
                     const dx = indexTip.x - gestureState.lastPointer.x;
                     const dy = indexTip.y - gestureState.lastPointer.y;
-                    viewState.targetRotationY += dx * 7;
-                    viewState.targetRotationX += dy * 5;
-                    viewState.targetRotationX = clamp(viewState.targetRotationX, -Math.PI / 2, Math.PI / 2);
+                    viewState.targetTheta = viewState.targetTheta - dx * 420;
+                    viewState.targetPhi = clamp(viewState.targetPhi + dy * 280, 15, 160);
                 }
 
                 gestureState.lastPointer = { x: indexTip.x, y: indexTip.y };
@@ -534,8 +435,8 @@
                 if (gestureState.lastPinchPoint) {
                     const dx = pinchPoint.x - gestureState.lastPinchPoint.x;
                     const dy = pinchPoint.y - gestureState.lastPinchPoint.y;
-                    viewState.targetPanX = clamp(viewState.targetPanX - dx * 6, -2.4, 2.4);
-                    viewState.targetPanY = clamp(viewState.targetPanY - dy * 4, -1.8, 1.8);
+                    viewState.targetX = clamp(viewState.targetX - dx * 4.2, -2.2, 2.2);
+                    viewState.targetY = clamp(viewState.targetY + dy * 3.2, -1.6, 1.6);
                 }
 
                 gestureState.lastPinchPoint = pinchPoint;
@@ -561,10 +462,10 @@
                         -zoomSettings.maxDelta,
                         zoomSettings.maxDelta
                     );
-                    viewState.targetZoom = clamp(
-                        viewState.targetZoom + zoomDelta * zoomSettings.sensitivity,
-                        0.35,
-                        3.2
+                    viewState.targetRadius = clamp(
+                        viewState.targetRadius - zoomDelta * zoomSettings.sensitivity,
+                        1.2,
+                        8
                     );
                 }
 
@@ -630,7 +531,7 @@
             async function startApp() {
                 try {
                     await initWebcam();
-                    initThreeJS();
+                    initModelViewer();
 
                     const hands = await initMediaPipeHands();
                     hands.onResults(onResults);
