@@ -252,12 +252,12 @@
                 canvasElement.height = window.innerHeight;
             }
 
-            function resizeRenderer() {
+            function resizeCanvas() {
                 updateCanvasSize();
             }
 
-            window.addEventListener('resize', resizeRenderer);
-            resizeRenderer();
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
 
             async function initWebcam() {
                 try {
@@ -273,7 +273,7 @@
 
                     return new Promise((resolve) => {
                         videoElement.onloadedmetadata = () => {
-                            resizeRenderer();
+                            resizeCanvas();
                             resolve(videoElement);
                         };
                     });
@@ -352,6 +352,11 @@
                 return calculateDistance(landmarks[4], landmarks[8]) < 0.075;
             }
 
+            function getPhysicalHandLabel(mediaPipeLabel) {
+                // The preview is mirrored, so flip MediaPipe's label for controls.
+                return mediaPipeLabel === 'Left' ? 'Right' : 'Left';
+            }
+
             function drawLandmarks(landmarks, isLeft) {
                 const screenSize = Math.min(window.innerWidth, window.innerHeight);
                 const lineWidth = Math.max(2, Math.min(5, screenSize / 300));
@@ -399,7 +404,7 @@
                 gestureState.smoothedTwoHandDistance = null;
             }
 
-            function handleRotate(landmarks) {
+            function handleRightHandRotate(landmarks) {
                 const indexTip = landmarks[8];
 
                 gestureState.lastTwoHandDistance = null;
@@ -415,10 +420,10 @@
                 }
 
                 gestureState.lastPointer = { x: indexTip.x, y: indexTip.y };
-                statusElement.textContent = 'Rotating model';
+                statusElement.textContent = 'Rotating model with right hand';
             }
 
-            function handlePinchPan(landmarks) {
+            function handleLeftHandPinchPan(landmarks) {
                 const pinchPoint = midpoint(landmarks[4], landmarks[8]);
 
                 gestureState.lastTwoHandDistance = null;
@@ -428,7 +433,7 @@
 
                 if (!isPinching(landmarks)) {
                     gestureState.lastPinchPoint = null;
-                    statusElement.textContent = 'Pinch to pan';
+                    statusElement.textContent = 'Pinch with left hand to pan';
                     return;
                 }
 
@@ -440,7 +445,7 @@
                 }
 
                 gestureState.lastPinchPoint = pinchPoint;
-                statusElement.textContent = 'Panning model';
+                statusElement.textContent = 'Panning model with left hand';
             }
 
             function handleTwoHands(firstHand, secondHand) {
@@ -511,19 +516,19 @@
                 }
 
                 hands.forEach((landmarks, index) => {
-                    const handedness = results.multiHandedness[index].label;
+                    const handedness = getPhysicalHandLabel(results.multiHandedness[index].label);
                     drawLandmarks(landmarks, handedness === 'Left');
                 });
 
                 if (hands.length >= 2) {
                     handleTwoHands(hands[0], hands[1]);
                 } else {
-                    const handedness = results.multiHandedness[0].label;
+                    const handedness = getPhysicalHandLabel(results.multiHandedness[0].label);
 
-                    if (handedness === 'Left') {
-                        handleRotate(hands[0]);
+                    if (handedness === 'Right') {
+                        handleRightHandRotate(hands[0]);
                     } else {
-                        handlePinchPan(hands[0]);
+                        handleLeftHandPinchPan(hands[0]);
                     }
                 }
             }
